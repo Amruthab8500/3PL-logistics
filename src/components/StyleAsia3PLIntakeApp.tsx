@@ -971,7 +971,12 @@ export default function StyleAsia3PLIntakeApp() {
   const pullFromGoogleSheet = async () => {
     const url = (integrations.googleSheetsWebhook.trim() || ENV_GOOGLE_SHEETS_WEBHOOK).trim();
     if (!url) {
-      toast.error('Google Sheets URL missing. Admin: open Settings → paste your Apps Script "web app" URL, then try again.');
+      const isAdminSession = user != null && user.isAdmin;
+      toast.error(
+        isAdminSession
+          ? 'Google Sheets URL missing. Open Settings → Integrations → paste your Apps Script web app URL (ends with /exec), then try again.'
+          : "Google Sheets isn't connected on this browser yet. Open Settings → Integrations and paste the Apps Script URL, or ask an admin to do it once on this computer."
+      );
       return;
     }
     setSheetPullLoading(true);
@@ -1396,9 +1401,7 @@ export default function StyleAsia3PLIntakeApp() {
         </div>
 
         <Tabs defaultValue="intake" className="space-y-6">
-          <TabsList
-            className={`no-print grid h-auto w-full grid-cols-2 gap-1 rounded-2xl bg-white p-1 shadow-sm ${user.isAdmin ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}
-          >
+          <TabsList className="no-print grid h-auto w-full grid-cols-2 gap-1 rounded-2xl bg-white p-1 shadow-sm sm:grid-cols-4">
             <TabsTrigger value="intake" className="rounded-xl">
               Intake
             </TabsTrigger>
@@ -1409,11 +1412,9 @@ export default function StyleAsia3PLIntakeApp() {
               <Printer className="mr-1.5 inline h-4 w-4" />
               Client form
             </TabsTrigger>
-            {user.isAdmin ? (
-              <TabsTrigger value="settings" className="rounded-xl">
-                Settings
-              </TabsTrigger>
-            ) : null}
+            <TabsTrigger value="settings" className="rounded-xl">
+              Settings
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="intake" className="no-print">
@@ -1826,89 +1827,90 @@ export default function StyleAsia3PLIntakeApp() {
             </div>
           </TabsContent>
 
-          {user.isAdmin ? (
-            <TabsContent value="settings" className="no-print">
-            <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-              <Card className="rounded-3xl shadow-sm lg:col-span-2">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-2xl">
-                    <Users className="h-5 w-5" /> Staff users
-                  </CardTitle>
-                  <CardDescription>
-                    Logins are stored in this browser only (localStorage). Add coworkers here — passwords are not encrypted;
-                    use strong passwords and keep the staff URL private.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <form
-                    onSubmit={addStaffUser}
-                    className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/50 p-4"
-                  >
-                    <div className="grid gap-3 md:grid-cols-4">
-                      <Input
-                        placeholder="Full name"
-                        value={newStaff.name}
-                        onChange={(e) => setNewStaff((s) => ({ ...s, name: e.target.value }))}
-                        className="rounded-xl"
-                      />
-                      <Input
-                        type="email"
-                        placeholder="Email (login)"
-                        value={newStaff.email}
-                        onChange={(e) => setNewStaff((s) => ({ ...s, email: e.target.value }))}
-                        className="rounded-xl"
-                      />
-                      <Input
-                        type="password"
-                        placeholder="Password"
-                        value={newStaff.password}
-                        onChange={(e) => setNewStaff((s) => ({ ...s, password: e.target.value }))}
-                        className="rounded-xl"
-                      />
-                      <Button type="submit" className="rounded-xl">
-                        Add user
-                      </Button>
-                    </div>
-                    <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-                      <Checkbox
-                        checked={newStaff.isAdmin}
-                        onCheckedChange={(v) => setNewStaff((s) => ({ ...s, isAdmin: v === true }))}
-                      />
-                      Admin access (Settings, integrations, workflow panel, full help text)
-                    </label>
-                  </form>
-                  <ul className="divide-y rounded-2xl border">
-                    {staffUsers.map((u) => (
-                      <li key={u.email} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div>
-                            <p className="font-medium text-slate-900">{u.name}</p>
-                            <p className="text-slate-500">{u.email}</p>
-                          </div>
-                          {u.isAdmin ? (
-                            <Badge variant="secondary" className="rounded-full text-xs">
-                              Admin
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                          onClick={() => removeStaffUser(u.email)}
-                          disabled={
-                            staffUsers.length <= 1 ||
-                            (!!u.isAdmin && staffUsers.filter((x) => x.isAdmin).length <= 1)
-                          }
-                        >
-                          Remove
+          <TabsContent value="settings" className="no-print">
+            <div className={`grid gap-6 ${user.isAdmin ? "lg:grid-cols-[0.95fr_1.05fr]" : ""}`}>
+              {user.isAdmin ? (
+                <Card className="rounded-3xl shadow-sm lg:col-span-2">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-2xl">
+                      <Users className="h-5 w-5" /> Staff users
+                    </CardTitle>
+                    <CardDescription>
+                      Logins are stored in this browser only (localStorage). Add coworkers here — passwords are not encrypted;
+                      use strong passwords and keep the staff URL private.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <form
+                      onSubmit={addStaffUser}
+                      className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/50 p-4"
+                    >
+                      <div className="grid gap-3 md:grid-cols-4">
+                        <Input
+                          placeholder="Full name"
+                          value={newStaff.name}
+                          onChange={(e) => setNewStaff((s) => ({ ...s, name: e.target.value }))}
+                          className="rounded-xl"
+                        />
+                        <Input
+                          type="email"
+                          placeholder="Email (login)"
+                          value={newStaff.email}
+                          onChange={(e) => setNewStaff((s) => ({ ...s, email: e.target.value }))}
+                          className="rounded-xl"
+                        />
+                        <Input
+                          type="password"
+                          placeholder="Password"
+                          value={newStaff.password}
+                          onChange={(e) => setNewStaff((s) => ({ ...s, password: e.target.value }))}
+                          className="rounded-xl"
+                        />
+                        <Button type="submit" className="rounded-xl">
+                          Add user
                         </Button>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
+                      </div>
+                      <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                        <Checkbox
+                          checked={newStaff.isAdmin}
+                          onCheckedChange={(v) => setNewStaff((s) => ({ ...s, isAdmin: v === true }))}
+                        />
+                        Admin access (manage staff users, workflow panel)
+                      </label>
+                    </form>
+                    <ul className="divide-y rounded-2xl border">
+                      {staffUsers.map((u) => (
+                        <li key={u.email} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div>
+                              <p className="font-medium text-slate-900">{u.name}</p>
+                              <p className="text-slate-500">{u.email}</p>
+                            </div>
+                            {u.isAdmin ? (
+                              <Badge variant="secondary" className="rounded-full text-xs">
+                                Admin
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                            onClick={() => removeStaffUser(u.email)}
+                            disabled={
+                              staffUsers.length <= 1 ||
+                              (!!u.isAdmin && staffUsers.filter((x) => x.isAdmin).length <= 1)
+                            }
+                          >
+                            Remove
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              ) : null}
 
               <Card className="rounded-3xl shadow-sm">
                 <CardHeader>
@@ -1916,15 +1918,18 @@ export default function StyleAsia3PLIntakeApp() {
                     <Settings className="h-5 w-5" /> Integrations
                   </CardTitle>
                   <CardDescription>
-                    Staff-only screen (opened with <code className="rounded bg-slate-100 px-1">?staff=1</code>): post to a{" "}
-                    <strong>free</strong> Google Sheet via Apps Script. Optional email webhook. Customers use the same app
-                    URL <strong>without</strong> that flag—they never see Settings. For their submissions to reach Sheets,
-                    set <code className="rounded bg-slate-100 px-1">REACT_APP_GOOGLE_SHEETS_WEBHOOK_URL</code> in{" "}
-                    <code className="rounded bg-slate-100 px-1">.env</code> before <code className="rounded bg-slate-100 px-1">npm run build</code>, then upload <code className="rounded bg-slate-100 px-1">build</code> to your current host.{" "}
-                    <strong>Pull from Sheet</strong> needs the script to handle POST{" "}
-                    <code className="rounded bg-slate-100 px-1">{"{ action: 'listLeads' }"}</code> — use the project file{" "}
-                    <code className="rounded bg-slate-100 px-1">scripts/google-apps-script-sample.js</code> and deploy a new
-                    version after you update.
+                    Paste your <strong>Google Apps Script</strong> deployment URL here (Deploy → Web app → copy URL; usually
+                    ends with <code className="rounded bg-slate-100 px-1 text-xs">/exec</code>). Saved in this browser only.{" "}
+                    {user.isAdmin ? (
+                      <>
+                        For every visitor without a saved URL, you can also set repository secret{" "}
+                        <code className="rounded bg-slate-100 px-1 text-xs">REACT_APP_GOOGLE_SHEETS_WEBHOOK_URL</code> in
+                        GitHub Actions so the live build includes it.
+                      </>
+                    ) : null}{" "}
+                    <strong>Pull from Sheet</strong> needs your script to accept POST{" "}
+                    <code className="rounded bg-slate-100 px-1 text-xs">{"{ action: 'listLeads' }"}</code> (see{" "}
+                    <code className="rounded bg-slate-100 px-1 text-xs">scripts/google-apps-script-sample.js</code>).
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1966,58 +1971,56 @@ export default function StyleAsia3PLIntakeApp() {
                 </CardContent>
               </Card>
 
-              <Card className="rounded-3xl shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-2xl">How to wire it up</CardTitle>
-                  <CardDescription>
-                    New leads POST JSON to your Apps Script URL (optional). Customer page uses the same payload. Staff CRM
-                    stays usable fully offline in the browser except when syncing to Sheets.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm text-slate-700">
-                  <div className="rounded-2xl border p-4">
-                    <p className="font-medium">Google Sheets + customer confirmation email</p>
-                    <p className="mt-1 text-slate-600">
-                      Create a Google Apps Script web app linked to a Sheet. On each POST, append one row. For{" "}
-                      <strong>public</strong> inquiries, the JSON includes <code className="rounded bg-slate-100 px-1">customerConfirmation</code>{" "}
-                      (<code className="rounded bg-slate-100 px-1">send: true</code>, <code className="rounded bg-slate-100 px-1">to</code>, names) — use{" "}
-                      <code className="rounded bg-slate-100 px-1">MailApp.sendEmail</code> in the script to email them
-                      “we received your inquiry and will get back to you.” See <code className="rounded bg-slate-100 px-1">scripts/google-apps-script-sample.js</code>{" "}
-                      in this project for a paste-in example.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border p-4">
-                    <p className="font-medium">Customer link on your current website</p>
-                    <p className="mt-1 text-slate-600">
-                      Run <code className="rounded bg-slate-100 px-1">npm run build</code>, upload the{" "}
-                      <code className="rounded bg-slate-100 px-1">build</code> folder to your current web host. Link
-                      customers to the app URL <strong>without</strong>{" "}
-                      <code className="rounded bg-slate-100 px-1">?staff=1</code>—they only get the inquiry form. Staff use a
-                      private bookmark with <code className="rounded bg-slate-100 px-1">?staff=1</code> for the full hub.
-                      Optional: <code className="rounded bg-slate-100 px-1">?inquiry=1</code> for analytics. Put the Sheets
-                      script URL in <code className="rounded bg-slate-100 px-1">.env</code> before{" "}
-                      <code className="rounded bg-slate-100 px-1">npm run build</code>.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border p-4">
-                    <p className="font-medium">Email notifications</p>
-                    <p className="mt-1 text-slate-600">
-                      Use a webhook from Zapier, Make, n8n, Resend, SendGrid, or your own mail function. The app sends the
-                      lead payload after submission.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border p-4">
-                    <p className="font-medium">Right now</p>
-                    <p className="mt-1 text-slate-600">
-                      The staff dashboard works locally with login, lead saving, file capture, statuses, search, CSV export,
-                      and editing.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+              {user.isAdmin ? (
+                <Card className="rounded-3xl shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="text-2xl">How to wire it up</CardTitle>
+                    <CardDescription>
+                      New leads POST JSON to your Apps Script URL (optional). Customer page uses the same payload. Staff CRM
+                      stays usable fully offline in the browser except when syncing to Sheets.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4 text-sm text-slate-700">
+                    <div className="rounded-2xl border p-4">
+                      <p className="font-medium">Google Sheets + customer confirmation email</p>
+                      <p className="mt-1 text-slate-600">
+                        Create a Google Apps Script web app linked to a Sheet. On each POST, append one row. For{" "}
+                        <strong>public</strong> inquiries, the JSON includes <code className="rounded bg-slate-100 px-1">customerConfirmation</code>{" "}
+                        (<code className="rounded bg-slate-100 px-1">send: true</code>, <code className="rounded bg-slate-100 px-1">to</code>, names) — use{" "}
+                        <code className="rounded bg-slate-100 px-1">MailApp.sendEmail</code> in the script to email them
+                        “we received your inquiry and will get back to you.” See <code className="rounded bg-slate-100 px-1">scripts/google-apps-script-sample.js</code>{" "}
+                        in this project for a paste-in example.
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border p-4">
+                      <p className="font-medium">Customer link on your current website</p>
+                      <p className="mt-1 text-slate-600">
+                        Deploy the app (e.g. GitHub Pages). Link customers to the app URL <strong>without</strong>{" "}
+                        <code className="rounded bg-slate-100 px-1">?staff=1</code>—they only get the inquiry form. Staff use a
+                        private bookmark with <code className="rounded bg-slate-100 px-1">?staff=1</code>. Optional: add{" "}
+                        <code className="rounded bg-slate-100 px-1">REACT_APP_GOOGLE_SHEETS_WEBHOOK_URL</code> as a GitHub
+                        Actions secret so the built site posts to Sheets without each browser pasting the URL.
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border p-4">
+                      <p className="font-medium">Email notifications</p>
+                      <p className="mt-1 text-slate-600">
+                        Use a webhook from Zapier, Make, n8n, Resend, SendGrid, or your own mail function. The app sends the
+                        lead payload after submission.
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border p-4">
+                      <p className="font-medium">Right now</p>
+                      <p className="mt-1 text-slate-600">
+                        The staff dashboard works locally with login, lead saving, file capture, statuses, search, CSV export,
+                        and editing.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
             </div>
           </TabsContent>
-          ) : null}
         </Tabs>
       </div>
 
