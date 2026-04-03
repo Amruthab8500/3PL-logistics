@@ -258,6 +258,38 @@ function normalizeIntegrations(raw: unknown): IntegrationsConfig {
   };
 }
 
+function readIntegrationsFromStorage(): IntegrationsConfig {
+  if (typeof window === "undefined") return { ...defaultIntegrations };
+  try {
+    return normalizeIntegrations(safeJsonParse(localStorage.getItem(STORAGE.integrations), null));
+  } catch {
+    return { ...defaultIntegrations };
+  }
+}
+
+/** Prefer React state, then localStorage (public page never synced state before; Pull/submit always see saved URL), then build-time env. */
+function resolveGoogleSheetsWebhook(integrationsState: IntegrationsConfig): string {
+  const fromState = integrationsState.googleSheetsWebhook.trim();
+  if (fromState) return fromState;
+  const fromLs = readIntegrationsFromStorage().googleSheetsWebhook.trim();
+  if (fromLs) return fromLs;
+  return ENV_GOOGLE_SHEETS_WEBHOOK.trim();
+}
+
+function resolveEmailWebhook(integrationsState: IntegrationsConfig): string {
+  const fromState = integrationsState.emailWebhook.trim();
+  if (fromState) return fromState;
+  const fromLs = readIntegrationsFromStorage().emailWebhook.trim();
+  if (fromLs) return fromLs;
+  return ENV_EMAIL_WEBHOOK.trim();
+}
+
+function resolveNotifyEmail(integrationsState: IntegrationsConfig): string {
+  const fromState = integrationsState.notifyEmail.trim();
+  if (fromState) return fromState;
+  return readIntegrationsFromStorage().notifyEmail.trim();
+}
+
 function normalizeSessionUser(raw: unknown): SessionUser | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
@@ -459,6 +491,9 @@ export default function StyleAsia3PLIntakeApp() {
 
   useEffect(() => {
     if (isPublicInquiry) {
+      // Same localStorage as staff Settings so the public form POSTs after an admin saves the webhook once on this browser.
+      setIntegrations(readIntegrationsFromStorage());
+      setUiPrefs(normalizeUiPrefs(safeJsonParse(localStorage.getItem(STORAGE.uiPrefs), null)));
       setHydrated(true);
       return;
     }
@@ -673,8 +708,8 @@ export default function StyleAsia3PLIntakeApp() {
           }
         : undefined;
 
-    const sheetsUrl = (integrations.googleSheetsWebhook.trim() || ENV_GOOGLE_SHEETS_WEBHOOK).trim();
-    const emailUrl = (integrations.emailWebhook.trim() || ENV_EMAIL_WEBHOOK).trim();
+    const sheetsUrl = resolveGoogleSheetsWebhook(integrations);
+    const emailUrl = resolveEmailWebhook(integrations);
 
     if (!sheetsUrl && !emailUrl) {
       const msg =
@@ -716,7 +751,7 @@ export default function StyleAsia3PLIntakeApp() {
           headers: postHeadersForWebhook(emailUrl),
           body: JSON.stringify({
             destination: "email",
-            notifyEmail: integrations.notifyEmail,
+            notifyEmail: resolveNotifyEmail(integrations),
             subject: `New 3PL inquiry from ${lead.companyName}`,
             lead: payload,
             ...(customerConfirmation ? { customerConfirmation } : {}),
@@ -824,7 +859,7 @@ export default function StyleAsia3PLIntakeApp() {
 
   const pushStatusToSheet = async (rowIndex: number | undefined, status: LeadStatus) => {
     if (rowIndex == null) return;
-    const url = (integrations.googleSheetsWebhook.trim() || ENV_GOOGLE_SHEETS_WEBHOOK).trim();
+    const url = resolveGoogleSheetsWebhook(integrations);
     if (!url) return;
     try {
       const res = await fetch(url, {
@@ -969,7 +1004,7 @@ export default function StyleAsia3PLIntakeApp() {
   };
 
   const pullFromGoogleSheet = async () => {
-    const url = (integrations.googleSheetsWebhook.trim() || ENV_GOOGLE_SHEETS_WEBHOOK).trim();
+    const url = resolveGoogleSheetsWebhook(integrations);
     if (!url) {
       const isAdminSession = user != null && user.isAdmin;
       toast.error(
@@ -1584,7 +1619,7 @@ export default function StyleAsia3PLIntakeApp() {
                           <FileSpreadsheet className="h-4 w-4" /> Google Sheets
                         </div>
                         <p className="mt-1 text-sm text-slate-500">
-                          {integrations.googleSheetsWebhook.trim() || ENV_GOOGLE_SHEETS_WEBHOOK
+                          {resolveGoogleSheetsWebhook(integrations)
                             ? "Connected — new leads sync to your Sheet"
                             : "Not connected yet — add URL in Settings below"}
                         </p>
@@ -1594,8 +1629,8 @@ export default function StyleAsia3PLIntakeApp() {
                           <Mail className="h-4 w-4" /> Email Notification
                         </div>
                         <p className="mt-1 text-sm text-slate-500">
-                          {integrations.emailWebhook.trim() || ENV_EMAIL_WEBHOOK
-                            ? `Webhook ready${integrations.notifyEmail ? ` for ${integrations.notifyEmail}` : ""}`
+                          {resolveEmailWebhook(integrations)
+                            ? `Webhook ready${resolveNotifyEmail(integrations) ? ` for ${resolveNotifyEmail(integrations)}` : ""}`
                             : "Not connected yet"}
                         </p>
                       </div>
