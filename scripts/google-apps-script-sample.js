@@ -8,10 +8,10 @@
  *
  * Status column: found by header name "Status" (works after layout changes).
  *
- * STAFF LOGIN (optional): add a tab named **Staff** with row 1 headers:
- *   Email | Password | Name | IsAdmin
- * Rows 2+: one staff user per row. Passwords are plain text — restrict who can edit this sheet.
- * IsAdmin: yes / true / 1 / admin = admin user. The intake app calls action validateStaffLogin on the same web app URL.
+ * STAFF LOGIN (optional): add a tab named **Staff** (any letter case). Row 1 headers — include Password plus an email
+ * column (Email, E-mail, Login, …). Optional: Name, IsAdmin (yes/true/1/admin).
+ * Row 2+ = one staff user per row. Plain-text passwords — restrict Sheet access. Redeploy the script after edits.
+ * Script must live in the same spreadsheet (Extensions → Apps Script) so getActiveSpreadsheet() works.
  */
 
 /** Must match append order exactly (37 columns). */
@@ -121,6 +121,16 @@ function parseIsAdmin_(cell) {
   return s === "yes" || s === "true" || s === "1" || s === "admin" || s === "y";
 }
 
+/** Sheet tab by name, case-insensitive (Google's getSheetByName is case-sensitive). */
+function findSheetByNameCI_(ss, wantName) {
+  var want = String(wantName).trim().toLowerCase();
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    if (String(sheets[i].getName()).trim().toLowerCase() === want) return sheets[i];
+  }
+  return null;
+}
+
 /** Find Staff sheet column indices from header row (flexible column order). */
 function findStaffColumns_(headerRow) {
   var colEmail = -1;
@@ -129,10 +139,15 @@ function findStaffColumns_(headerRow) {
   var colAdmin = -1;
   for (var c = 0; c < headerRow.length; c++) {
     var hc = String(headerRow[c]).trim().toLowerCase();
-    if (hc === "email") colEmail = c;
-    else if (hc === "password") colPass = c;
-    else if (hc === "name") colName = c;
-    else if (hc === "isadmin" || hc === "admin" || hc === "role") colAdmin = c;
+    if (hc === "email" || hc === "e-mail" || hc === "login email" || hc === "login" || hc === "user email") {
+      if (colEmail < 0) colEmail = c;
+    } else if (hc === "password" || hc === "pass" || hc === "pwd") {
+      if (colPass < 0) colPass = c;
+    } else if (hc === "name" || hc === "display name" || hc === "full name") {
+      if (colName < 0) colName = c;
+    } else if (hc === "isadmin" || hc === "admin" || hc === "role") {
+      if (colAdmin < 0) colAdmin = c;
+    }
   }
   return { colEmail: colEmail, colPass: colPass, colName: colName, colAdmin: colAdmin };
 }
@@ -198,13 +213,33 @@ function doPost(e) {
           JSON.stringify({ ok: false, error: "Missing email or password" })
         ).setMimeType(ContentService.MimeType.JSON);
       }
-      var staffSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Staff");
-      if (!staffSheet || staffSheet.getLastRow() < 2) {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      if (!ss) {
         return ContentService.createTextOutput(
           JSON.stringify({
             ok: false,
             error:
-              'Add a sheet tab named "Staff" with row 1: Email, Password, Name, IsAdmin — then data rows below.',
+              "Apps Script has no active spreadsheet. Create the script from Extensions → Apps Script inside your Sheet (container-bound), or set SPREADSHEET_ID in Script properties and use openById.",
+          })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      var staffSheet = findSheetByNameCI_(ss, "Staff");
+      if (!staffSheet) {
+        return ContentService.createTextOutput(
+          JSON.stringify({
+            ok: false,
+            error:
+              'No tab named "Staff" (any casing). Add a sheet tab named Staff with row 1 headers: Email, Password, Name, IsAdmin.',
+          })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      var lr = staffSheet.getLastRow();
+      if (lr < 2) {
+        return ContentService.createTextOutput(
+          JSON.stringify({
+            ok: false,
+            error:
+              'Staff tab exists but has no user rows. Put headers in row 1 (Email, Password, …) and at least one staff user starting in row 2.',
           })
         ).setMimeType(ContentService.MimeType.JSON);
       }
@@ -214,7 +249,8 @@ function doPost(e) {
         return ContentService.createTextOutput(
           JSON.stringify({
             ok: false,
-            error: 'Staff tab row 1 must include columns named Email and Password (Name and IsAdmin optional).',
+            error:
+              'Staff row 1 must include Password and an email column (header Email, E-mail, or Login). Name and IsAdmin optional.',
           })
         ).setMimeType(ContentService.MimeType.JSON);
       }

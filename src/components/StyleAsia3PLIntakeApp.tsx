@@ -1104,10 +1104,14 @@ export default function StyleAsia3PLIntakeApp() {
         }
         const errMsg = typeof json.error === "string" ? json.error : "";
         const sheetNotReady =
-          /staff tab|sheet tab|add a sheet|email and password columns/i.test(errMsg) ||
-          /Staff sheet must have/i.test(errMsg);
+          /staff tab|sheet tab|add a sheet|no tab named|no user rows|Staff row 1 must|email column|Password and an email|container-bound|SPREADSHEET_ID|active spreadsheet/i.test(
+            errMsg
+          );
         if (sheetNotReady && tryLocalStaffLogin(emailNorm, password)) {
-          maybeToast(() => toast.message("Logged in with saved browser staff list (Google Sheet staff list not ready yet)."));
+          maybeToast(() => {
+            toast.error(errMsg.slice(0, 280) || "Google Sheet staff list is not set up yet.", { duration: 8000 });
+            toast.message("Signed in using this browser’s saved staff list instead. Fix the Sheet issue above, then redeploy the Apps Script.");
+          });
           return;
         }
         setSyncState({
