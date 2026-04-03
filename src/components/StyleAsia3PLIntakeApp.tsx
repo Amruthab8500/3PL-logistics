@@ -136,6 +136,24 @@ function postHeadersForWebhook(url: string): HeadersInit {
   return { "Content-Type": "application/json" };
 }
 
+async function postAppsScriptJson(url: string, payload: Record<string, unknown>): Promise<void> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: postHeadersForWebhook(url),
+    body: JSON.stringify(payload),
+  });
+  const text = await res.text();
+  let json: { ok?: boolean; error?: string };
+  try {
+    json = JSON.parse(text) as { ok?: boolean; error?: string };
+  } catch {
+    throw new Error("Apps Script did not return JSON. Deploy the latest scripts/google-apps-script-sample.js.");
+  }
+  if (!res.ok || json.ok === false) {
+    throw new Error(json.error || `Request failed (${res.status})`);
+  }
+}
+
 function revokeIfBlob(url: string | null | undefined) {
   if (url && url.startsWith("blob:")) {
     try {
@@ -1140,7 +1158,7 @@ export default function StyleAsia3PLIntakeApp() {
     }
   };
 
-  const addStaffUser = (e: React.FormEvent) => {
+  const addStaffUser = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = newStaff.name.trim();
     const email = newStaff.email.trim().toLowerCase();
@@ -1154,15 +1172,34 @@ export default function StyleAsia3PLIntakeApp() {
       return;
     }
     if (staffUsers.some((u) => u.email.trim().toLowerCase() === email)) {
-      toast.error("That email is already a staff user.");
+      toast.error("That email is already in this browser's staff list.");
       return;
+    }
+    const sheetsUrl = resolveGoogleSheetsWebhook(integrations);
+    if (sheetsUrl) {
+      try {
+        await postAppsScriptJson(sheetsUrl, {
+          action: "upsertStaffUser",
+          email,
+          password,
+          name,
+          isAdmin: newStaff.isAdmin,
+        });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not save staff user to Google Sheet.");
+        return;
+      }
     }
     setStaffUsers((prev) => [...prev, { name, email, password, isAdmin: newStaff.isAdmin }]);
     setNewStaff({ name: "", email: "", password: "", isAdmin: false });
-    maybeToast(() => toast.success("Staff user added."));
+    maybeToast(() =>
+      toast.success(
+        sheetsUrl ? "Staff user saved to Google Sheet and this browser — they can log in from any computer." : "Staff user added to this browser."
+      )
+    );
   };
 
-  const removeStaffUser = (email: string) => {
+  const removeStaffUser = async (email: string) => {
     const target = staffUsers.find((u) => u.email === email);
     if (target?.isAdmin && staffUsers.filter((u) => u.isAdmin).length <= 1) {
       toast.error("You must keep at least one admin account.");
@@ -1172,8 +1209,21 @@ export default function StyleAsia3PLIntakeApp() {
       toast.error("Keep at least one staff account.");
       return;
     }
-    setStaffUsers((prev) => prev.filter((u) => u.email !== email));
-    maybeToast(() => toast.message("Staff user removed."));
+    const sheetsUrl = resolveGoogleSheetsWebhook(integrations);
+    if (sheetsUrl) {
+      try {
+        await postAppsScriptJson(sheetsUrl, { action: "removeStaffUser", email: target?.email ?? email });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not remove staff user from Google Sheet.");
+        return;
+      }
+    }
+    setStaffUsers((prev) => prev.filter((u) => u.email.trim().toLowerCase() !== email.trim().toLowerCase()));
+    maybeToast(() =>
+      toast.message(
+        sheetsUrl ? "Removed from Google Sheet and this browser." : "Staff user removed from this browser."
+      )
+    );
   };
 
   const exportStaffUsersBackup = () => {
@@ -2072,7 +2122,7 @@ export default function StyleAsia3PLIntakeApp() {
                             variant="ghost"
                             size="sm"
                             className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                            onClick={() => removeStaffUser(u.email)}
+                            onClick={() => void removeStaffUser(u.email)}
                             disabled={
                               staffUsers.length <= 1 ||
                               (!!u.isAdmin && staffUsers.filter((x) => x.isAdmin).length <= 1)

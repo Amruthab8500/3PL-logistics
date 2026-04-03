@@ -12,6 +12,9 @@
  * column (Email, E-mail, Login, …). Optional: Name, IsAdmin (yes/true/1/admin).
  * Row 2+ = one staff user per row. Plain-text passwords — restrict Sheet access. Redeploy the script after edits.
  * Script must live in the same spreadsheet (Extensions → Apps Script) so getActiveSpreadsheet() works.
+ *
+ * Staff mutations: POST action upsertStaffUser { email, password, name, isAdmin } — add or update a row.
+ * removeStaffUser { email } — delete that user's row. Same security as lead POST (webhook URL must stay private).
  */
 
 /** Must match append order exactly (37 columns). */
@@ -131,6 +134,84 @@ function findSheetByNameCI_(ss, wantName) {
   return null;
 }
 
+/** Create Staff tab with standard headers if missing. */
+function ensureStaffSheet_(ss) {
+  var sh = findSheetByNameCI_(ss, "Staff");
+  if (sh) return sh;
+  sh = ss.insertSheet("Staff");
+  sh.getRange(1, 1, 1, 4).setValues([["Email", "Password", "Name", "IsAdmin"]]);
+  return sh;
+}
+
+/** First matching header row in first 25 rows, or null. */
+function getStaffSheetLayoutFromSheet_(staffSheet) {
+  var lastR = staffSheet.getLastRow();
+  var lastC = Math.max(staffSheet.getLastColumn(), 1);
+  if (lastR < 1) return null;
+  var svals = staffSheet.getRange(1, 1, lastR, lastC).getValues();
+  for (var hi = 0; hi < Math.min(svals.length, 25); hi++) {
+    var tryCols = findStaffColumns_(svals[hi]);
+    if (tryCols.colEmail >= 0 && tryCols.colPass >= 0) {
+      return { sheet: staffSheet, headerRowIdx: hi, cols: tryCols, svals: svals };
+    }
+  }
+  return null;
+}
+
+function upsertStaffUserInSheet_(ss, email, password, name, isAdmin) {
+  var staffSheet = ensureStaffSheet_(ss);
+  var layout = getStaffSheetLayoutFromSheet_(staffSheet);
+  if (!layout) {
+    throw new Error(
+      "Staff tab needs a header row with Email and Password columns. New tabs get standard headers automatically — redeploy after creating Staff."
+    );
+  }
+  var cols = layout.cols;
+  var hdr = layout.headerRowIdx;
+  var svals = layout.svals;
+  var sheet = layout.sheet;
+  var emailNorm = String(email).trim().toLowerCase();
+  for (var r = hdr + 1; r < svals.length; r++) {
+    var er = String(svals[r][cols.colEmail] || "").trim().toLowerCase();
+    if (er === emailNorm) {
+      var r1 = r + 1;
+      sheet.getRange(r1, cols.colEmail + 1).setValue(String(email).trim());
+      sheet.getRange(r1, cols.colPass + 1).setValue(String(password));
+      if (cols.colName >= 0) sheet.getRange(r1, cols.colName + 1).setValue(String(name || email));
+      if (cols.colAdmin >= 0) sheet.getRange(r1, cols.colAdmin + 1).setValue(isAdmin ? "yes" : "no");
+      return;
+    }
+  }
+  var lc = Math.max(sheet.getLastColumn(), cols.colEmail + 1, cols.colPass + 1);
+  if (cols.colName >= 0) lc = Math.max(lc, cols.colName + 1);
+  if (cols.colAdmin >= 0) lc = Math.max(lc, cols.colAdmin + 1);
+  var newRow = [];
+  for (var i = 0; i < lc; i++) newRow.push("");
+  newRow[cols.colEmail] = String(email).trim();
+  newRow[cols.colPass] = String(password);
+  if (cols.colName >= 0 && cols.colName < lc) newRow[cols.colName] = String(name || email);
+  if (cols.colAdmin >= 0 && cols.colAdmin < lc) newRow[cols.colAdmin] = isAdmin ? "yes" : "no";
+  sheet.appendRow(newRow);
+}
+
+function removeStaffUserFromSheet_(ss, email) {
+  var staffSheet = findSheetByNameCI_(ss, "Staff");
+  if (!staffSheet) return;
+  var layout = getStaffSheetLayoutFromSheet_(staffSheet);
+  if (!layout) return;
+  var cols = layout.cols;
+  var hdr = layout.headerRowIdx;
+  var svals = layout.svals;
+  var emailNorm = String(email).trim().toLowerCase();
+  for (var r = hdr + 1; r < svals.length; r++) {
+    var er = String(svals[r][cols.colEmail] || "").trim().toLowerCase();
+    if (er === emailNorm) {
+      layout.sheet.deleteRow(r + 1);
+      return;
+    }
+  }
+}
+
 /** Find Staff sheet column indices from header row (flexible column order). */
 function findStaffColumns_(headerRow) {
   var colEmail = -1;
@@ -233,28 +314,55 @@ function doPost(e) {
           })
         ).setMimeType(ContentService.MimeType.JSON);
       }
-      var lr = staffSheet.getLastRow();
-      if (lr < 2) {
+      var lastR = staffSheet.getLastRow();
+      var lastC = Math.max(staffSheet.getLastColumn(), 1);
+      if (lastR < 1) {
         return ContentService.createTextOutput(
           JSON.stringify({
             ok: false,
             error:
-              'Staff tab exists but has no user rows. Put headers in row 1 (Email, Password, …) and at least one staff user starting in row 2.',
+              "Staff tab is empty. Add headers (Email, Password, …) and at least one user row with both cells filled.",
           })
         ).setMimeType(ContentService.MimeType.JSON);
       }
-      var svals = staffSheet.getDataRange().getValues();
-      var cols = findStaffColumns_(svals[0]);
-      if (cols.colEmail < 0 || cols.colPass < 0) {
+      var svals = staffSheet.getRange(1, 1, lastR, lastC).getValues();
+      var headerRowIdx = -1;
+      var cols = null;
+      var scanMax = Math.min(svals.length, 25);
+      for (var hi = 0; hi < scanMax; hi++) {
+        var tryCols = findStaffColumns_(svals[hi]);
+        if (tryCols.colEmail >= 0 && tryCols.colPass >= 0) {
+          headerRowIdx = hi;
+          cols = tryCols;
+          break;
+        }
+      }
+      if (headerRowIdx < 0 || !cols) {
         return ContentService.createTextOutput(
           JSON.stringify({
             ok: false,
             error:
-              'Staff row 1 must include Password and an email column (header Email, E-mail, or Login). Name and IsAdmin optional.',
+              "Staff tab: in the first rows, include a header row with Email (or E-mail / Login) and Password columns. Optional: Name, IsAdmin. You can put a title on row 1 and headers on row 2.",
           })
         ).setMimeType(ContentService.MimeType.JSON);
       }
-      for (var sr = 1; sr < svals.length; sr++) {
+      var hasDataRow = false;
+      for (var dr = headerRowIdx + 1; dr < svals.length; dr++) {
+        var drow = svals[dr];
+        var dem = String(drow[cols.colEmail] || "").trim();
+        var dpw = String(drow[cols.colPass] || "");
+        if (dem && dpw) hasDataRow = true;
+      }
+      if (!hasDataRow) {
+        return ContentService.createTextOutput(
+          JSON.stringify({
+            ok: false,
+            error:
+              "Staff tab: headers found, but no row below them has both Email and Password filled. Add row(s): col Email = login email, col Password = exact password (same row).",
+          })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      for (var sr = headerRowIdx + 1; sr < svals.length; sr++) {
         var srow = svals[sr];
         var rowEmail = String(srow[cols.colEmail] || "").trim().toLowerCase();
         var rowPass = String(srow[cols.colPass] || "");
@@ -271,6 +379,55 @@ function doPost(e) {
       return ContentService.createTextOutput(
         JSON.stringify({ ok: false, error: "Invalid email or password" })
       ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (data.action === "upsertStaffUser") {
+      var uEmail = String(data.email || "").trim();
+      var uPass = String(data.password || "");
+      var uName = String(data.name || "").trim();
+      var uAdmin = data.isAdmin === true;
+      if (!uEmail || uPass === "") {
+        return ContentService.createTextOutput(
+          JSON.stringify({ ok: false, error: "email and password are required" })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      var ssUpsert = SpreadsheetApp.getActiveSpreadsheet();
+      if (!ssUpsert) {
+        return ContentService.createTextOutput(
+          JSON.stringify({ ok: false, error: "No active spreadsheet (bind script to the Sheet)." })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      try {
+        upsertStaffUserInSheet_(ssUpsert, uEmail, uPass, uName || uEmail, uAdmin);
+      } catch (errUpsert) {
+        return ContentService.createTextOutput(
+          JSON.stringify({ ok: false, error: String(errUpsert) })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (data.action === "removeStaffUser") {
+      var remEmail = String(data.email || "").trim();
+      if (!remEmail) {
+        return ContentService.createTextOutput(
+          JSON.stringify({ ok: false, error: "email is required" })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      var ssRem = SpreadsheetApp.getActiveSpreadsheet();
+      if (!ssRem) {
+        return ContentService.createTextOutput(
+          JSON.stringify({ ok: false, error: "No active spreadsheet (bind script to the Sheet)." })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      try {
+        removeStaffUserFromSheet_(ssRem, remEmail);
+      } catch (errRem) {
+        return ContentService.createTextOutput(
+          JSON.stringify({ ok: false, error: String(errRem) })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);
     }
 
     if (data.action === "listLeads") {
