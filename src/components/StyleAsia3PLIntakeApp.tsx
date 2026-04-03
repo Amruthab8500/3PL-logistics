@@ -107,7 +107,7 @@ function normalizeStaffUsers(raw: unknown): StaffDirectoryEntry[] {
     if (!email || !name) return [];
     const isAdmin: boolean =
       typeof r.isAdmin === "boolean" ? r.isAdmin : email === "admin@styleasia.com";
-    return [{ email: r.email.trim(), password: r.password, name, isAdmin }];
+    return [{ email, password: r.password, name, isAdmin }];
   });
 }
 
@@ -473,6 +473,7 @@ export default function StyleAsia3PLIntakeApp() {
   const [sheetPullLoading, setSheetPullLoading] = useState(false);
   const [lastSheetPullAt, setLastSheetPullAt] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const staffImportInputRef = useRef<HTMLInputElement>(null);
 
   const staffBookmarkUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -1060,23 +1061,79 @@ export default function StyleAsia3PLIntakeApp() {
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
+  const tryLocalStaffLogin = (emailNorm: string, password: string): boolean => {
     const found = staffUsers.find(
-      (staff) =>
-        staff.email.trim().toLowerCase() === login.email.trim().toLowerCase() && staff.password === login.password
+      (staff) => staff.email.trim().toLowerCase() === emailNorm && staff.password === password
     );
-    if (!found) {
-      setSyncState({
-        type: "error",
-        message: "Login failed. Check your email and password, or ask an admin for access.",
-      });
-      maybeToast(() => toast.error("Login failed."));
-      return;
-    }
+    if (!found) return false;
     setUser({ email: found.email, name: found.name, isAdmin: !!found.isAdmin });
     setSyncState({ type: "success", message: `Welcome back, ${found.name}.` });
     maybeToast(() => toast.success(`Welcome back, ${found.name}.`));
+    return true;
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const emailNorm = login.email.trim().toLowerCase();
+    const password = login.password;
+    const url = resolveGoogleSheetsWebhook(integrations);
+
+    if (url) {
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: postHeadersForWebhook(url),
+          body: JSON.stringify({ action: "validateStaffLogin", email: emailNorm, password }),
+        });
+        const text = await res.text();
+        let json: { ok?: boolean; name?: string; email?: string; isAdmin?: boolean; error?: string };
+        try {
+          json = JSON.parse(text) as typeof json;
+        } catch {
+          throw new Error("bad_json");
+        }
+        if (json.ok === true && json.name) {
+          setUser({
+            email: (json.email || emailNorm).trim().toLowerCase(),
+            name: json.name,
+            isAdmin: !!json.isAdmin,
+          });
+          setSyncState({ type: "success", message: `Welcome back, ${json.name}.` });
+          maybeToast(() => toast.success(`Welcome back, ${json.name}.`));
+          return;
+        }
+        const errMsg = typeof json.error === "string" ? json.error : "";
+        const sheetNotReady =
+          /staff tab|sheet tab|add a sheet|email and password columns/i.test(errMsg) ||
+          /Staff sheet must have/i.test(errMsg);
+        if (sheetNotReady && tryLocalStaffLogin(emailNorm, password)) {
+          maybeToast(() => toast.message("Logged in with saved browser staff list (Google Sheet staff list not ready yet)."));
+          return;
+        }
+        setSyncState({
+          type: "error",
+          message: errMsg || "Login failed. Check the Staff tab in your Google Sheet or your password.",
+        });
+        maybeToast(() => toast.error("Login failed."));
+        return;
+      } catch {
+        if (tryLocalStaffLogin(emailNorm, password)) {
+          maybeToast(() => toast.message("Could not reach Google — logged in with saved staff list on this browser."));
+          return;
+        }
+      }
+    }
+
+    if (!tryLocalStaffLogin(emailNorm, password)) {
+      setSyncState({
+        type: "error",
+        message:
+          url
+            ? "Login failed. If you use the Staff sheet, add your row there or check your password."
+            : "Login failed. Check your email and password, import a staff list, or ask an admin.",
+      });
+      maybeToast(() => toast.error("Login failed."));
+    }
   };
 
   const addStaffUser = (e: React.FormEvent) => {
@@ -1096,10 +1153,7 @@ export default function StyleAsia3PLIntakeApp() {
       toast.error("That email is already a staff user.");
       return;
     }
-    setStaffUsers((prev) => [
-      ...prev,
-      { name, email: newStaff.email.trim(), password, isAdmin: newStaff.isAdmin },
-    ]);
+    setStaffUsers((prev) => [...prev, { name, email, password, isAdmin: newStaff.isAdmin }]);
     setNewStaff({ name: "", email: "", password: "", isAdmin: false });
     maybeToast(() => toast.success("Staff user added."));
   };
@@ -1116,6 +1170,61 @@ export default function StyleAsia3PLIntakeApp() {
     }
     setStaffUsers((prev) => prev.filter((u) => u.email !== email));
     maybeToast(() => toast.message("Staff user removed."));
+  };
+
+  const exportStaffUsersBackup = () => {
+    try {
+      const blob = new Blob([JSON.stringify(staffUsers, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "style-asia-3pl-staff-users.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      maybeToast(() =>
+        toast.success("Staff list downloaded. It contains passwords — keep the file private. Import it on other computers under Settings.")
+      );
+    } catch {
+      toast.error("Could not export staff list.");
+    }
+  };
+
+  const importStaffUsersFromFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = String(reader.result ?? "");
+        const data = JSON.parse(text) as unknown;
+        const rawList = Array.isArray(data)
+          ? data
+          : data && typeof data === "object" && Array.isArray((data as Record<string, unknown>).users)
+            ? ((data as Record<string, unknown>).users as unknown[])
+            : [];
+        const parsed = normalizeStaffUsers(rawList);
+        if (!parsed.length) {
+          toast.error('Import a JSON array of { "name", "email", "password", "isAdmin" }. Export from Settings on the admin computer.');
+          return;
+        }
+        if (!parsed.some((u) => u.isAdmin)) {
+          toast.error("Imported list must include at least one admin.");
+          return;
+        }
+        if (
+          !window.confirm(
+            "Replace all staff users on this browser with the imported list? Current logins on this computer will be overwritten."
+          )
+        ) {
+          return;
+        }
+        setStaffUsers(parsed);
+        toast.success("Staff users imported. Log in with an account from the list.");
+      } catch {
+        toast.error("Could not read that file. Use a JSON export from this app.");
+      }
+    };
+    reader.readAsText(file);
   };
 
   const logout = () => {
@@ -1258,9 +1367,9 @@ export default function StyleAsia3PLIntakeApp() {
               <CardHeader>
                 <CardTitle className="text-2xl">Login</CardTitle>
                 <CardDescription>
-                  Sign in with the email and password your administrator created. After the{" "}
-                  <strong>first</strong> login, an admin can add more staff under <strong>Settings</strong>. Passwords are
-                  not shown on this page — keep the staff URL private.
+                  If your team uses the <strong>Staff</strong> tab in Google Sheets (same Apps Script as leads), use those
+                  credentials here — they work from any computer. Otherwise use accounts from <strong>Settings</strong> on
+                  this browser or an imported staff file. Keep the staff URL private.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1871,11 +1980,38 @@ export default function StyleAsia3PLIntakeApp() {
                       <Users className="h-5 w-5" /> Staff users
                     </CardTitle>
                     <CardDescription>
-                      Logins are stored in this browser only (localStorage). Add coworkers here — passwords are not encrypted;
-                      use strong passwords and keep the staff URL private.
+                      <strong>Google Sheet (recommended):</strong> add a tab named <code className="rounded bg-slate-100 px-1 text-xs">Staff</code> in
+                      the same workbook as Leads (row 1: Email, Password, Name, IsAdmin). Anyone can sign in from any computer when
+                      the Apps Script URL is configured — no export/import needed. Passwords in the Sheet are plain text; limit who
+                      can edit that tab. <strong>This section</strong> below is a backup list stored in{" "}
+                      <strong>this browser only</strong> (export/import between PCs if you are not using the Sheet tab yet).
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
+                    <input
+                      ref={staffImportInputRef}
+                      type="file"
+                      accept="application/json,.json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) importStaffUsersFromFile(f);
+                        e.target.value = "";
+                      }}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant="outline" className="rounded-xl" onClick={exportStaffUsersBackup}>
+                        <Download className="mr-2 h-4 w-4" /> Export staff list (JSON)
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-xl"
+                        onClick={() => staffImportInputRef.current?.click()}
+                      >
+                        <Upload className="mr-2 h-4 w-4" /> Import staff list
+                      </Button>
+                    </div>
                     <form
                       onSubmit={addStaffUser}
                       className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/50 p-4"

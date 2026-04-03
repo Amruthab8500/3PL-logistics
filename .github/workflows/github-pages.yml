@@ -1,10 +1,23 @@
-# Build the React app and deploy to GitHub Pages.
-# Repo: Settings → Pages → Build and deployment → Source: "GitHub Actions"
+# Deploy to GitHub Pages (React build → static site).
 #
-# Optional secrets (repo → Settings → Secrets): set these if the public form should POST
-# without pasting the webhook in each browser:
+# Pages: Repo → Settings → Pages → Build and deployment → Source: "GitHub Actions"
+#
+# ── Required for the PUBLIC inquiry form (no ?staff=1) to POST to Google Sheets ──
+# The name must match exactly (copy-paste):
 #   REACT_APP_GOOGLE_SHEETS_WEBHOOK_URL
-#   REACT_APP_EMAIL_WEBHOOK_URL
+#
+# Add it in ONE of these places (not both required):
+#   1) Repository secret (recommended):
+#      Repo → Settings → Secrets and variables → Actions
+#      → "Repository secrets" tab → New repository secret
+#   2) Environment secret (also works with this workflow):
+#      Repo → Settings → Environments → github-pages → Environment secrets
+#
+# Value: your Apps Script Deploy → Web app URL, e.g.
+#   https://script.google.com/macros/s/AKfycb.../exec
+# No quotes. No spaces before/after. Redeploy after saving (push or Re-run workflow).
+#
+# Optional repository secret: REACT_APP_EMAIL_WEBHOOK_URL
 
 name: Deploy GitHub Pages
 
@@ -25,21 +38,46 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # So "Environment secrets" on github-pages are visible during npm run build (same as deploy job).
+    environment: github-pages
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
+
+      - name: Confirm Google Sheets webhook secret is set
+        env:
+          SHEETS_URL: ${{ secrets.REACT_APP_GOOGLE_SHEETS_WEBHOOK_URL }}
+        run: |
+          if [ -z "${SHEETS_URL:-}" ]; then
+            echo "::error::REACT_APP_GOOGLE_SHEETS_WEBHOOK_URL is empty."
+            echo ""
+            echo "The public form and hosted app need this secret at BUILD time."
+            echo "1. Open: Repo Settings → Secrets and variables → Actions"
+            echo "2. Under 'Repository secrets', click 'New repository secret'"
+            echo "3. Name (exactly): REACT_APP_GOOGLE_SHEETS_WEBHOOK_URL"
+            echo "4. Value: full Apps Script Web App URL ending in /exec"
+            echo "5. Save, then Actions → Deploy GitHub Pages → Re-run all jobs"
+            echo ""
+            echo "If you put the secret under Environments → github-pages instead, this workflow"
+            echo "already uses environment 'github-pages' on the build job so it should work—"
+            echo "double-check the secret NAME has no typo."
+            exit 1
+          fi
+          echo " Sheets webhook secret is present (length check only)."
+
       - name: Install
         run: npm ci
+
       - name: Build
         env:
-          # Project Pages URL: https://<owner>.github.io/<repo>/
           PUBLIC_URL: /${{ github.event.repository.name }}/
           REACT_APP_GOOGLE_SHEETS_WEBHOOK_URL: ${{ secrets.REACT_APP_GOOGLE_SHEETS_WEBHOOK_URL }}
           REACT_APP_EMAIL_WEBHOOK_URL: ${{ secrets.REACT_APP_EMAIL_WEBHOOK_URL }}
         run: npm run build
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build

@@ -7,6 +7,11 @@
  * If you still use a legacy 12-column row, Pull keeps working; new appends use the wide layout.
  *
  * Status column: found by header name "Status" (works after layout changes).
+ *
+ * STAFF LOGIN (optional): add a tab named **Staff** with row 1 headers:
+ *   Email | Password | Name | IsAdmin
+ * Rows 2+: one staff user per row. Passwords are plain text — restrict who can edit this sheet.
+ * IsAdmin: yes / true / 1 / admin = admin user. The intake app calls action validateStaffLogin on the same web app URL.
  */
 
 /** Must match append order exactly (37 columns). */
@@ -110,6 +115,28 @@ function fileListFromCell_(filesStr, r) {
 }
 
 /** Build listLeads JSON object from wide row (0-based indices) */
+function parseIsAdmin_(cell) {
+  if (cell === true) return true;
+  var s = String(cell === 0 ? "0" : cell || "").trim().toLowerCase();
+  return s === "yes" || s === "true" || s === "1" || s === "admin" || s === "y";
+}
+
+/** Find Staff sheet column indices from header row (flexible column order). */
+function findStaffColumns_(headerRow) {
+  var colEmail = -1;
+  var colPass = -1;
+  var colName = -1;
+  var colAdmin = -1;
+  for (var c = 0; c < headerRow.length; c++) {
+    var hc = String(headerRow[c]).trim().toLowerCase();
+    if (hc === "email") colEmail = c;
+    else if (hc === "password") colPass = c;
+    else if (hc === "name") colName = c;
+    else if (hc === "isadmin" || hc === "admin" || hc === "role") colAdmin = c;
+  }
+  return { colEmail: colEmail, colPass: colPass, colName: colName, colAdmin: colAdmin };
+}
+
 function wideRowToLead_(row37, r) {
   var row = padRow_(row37, WIDE_COL_COUNT);
   var status = String(row[STATUS_IDX_WIDE] || "New");
@@ -162,6 +189,53 @@ function wideRowToLead_(row37, r) {
 function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
+
+    if (data.action === "validateStaffLogin") {
+      var loginEmail = String(data.email || "").trim().toLowerCase();
+      var loginPass = String(data.password || "");
+      if (!loginEmail || loginPass === "") {
+        return ContentService.createTextOutput(
+          JSON.stringify({ ok: false, error: "Missing email or password" })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      var staffSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Staff");
+      if (!staffSheet || staffSheet.getLastRow() < 2) {
+        return ContentService.createTextOutput(
+          JSON.stringify({
+            ok: false,
+            error:
+              'Add a sheet tab named "Staff" with row 1: Email, Password, Name, IsAdmin — then data rows below.',
+          })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      var svals = staffSheet.getDataRange().getValues();
+      var cols = findStaffColumns_(svals[0]);
+      if (cols.colEmail < 0 || cols.colPass < 0) {
+        return ContentService.createTextOutput(
+          JSON.stringify({
+            ok: false,
+            error: 'Staff tab row 1 must include columns named Email and Password (Name and IsAdmin optional).',
+          })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      for (var sr = 1; sr < svals.length; sr++) {
+        var srow = svals[sr];
+        var rowEmail = String(srow[cols.colEmail] || "").trim().toLowerCase();
+        var rowPass = String(srow[cols.colPass] || "");
+        if (rowEmail === loginEmail && rowPass === loginPass) {
+          var dispName = cols.colName >= 0 ? String(srow[cols.colName] || "").trim() : "";
+          if (!dispName) dispName = loginEmail;
+          var isAd = cols.colAdmin >= 0 ? parseIsAdmin_(srow[cols.colAdmin]) : false;
+          var outEmail = String(srow[cols.colEmail] || "").trim().toLowerCase();
+          return ContentService.createTextOutput(
+            JSON.stringify({ ok: true, email: outEmail, name: dispName, isAdmin: isAd })
+          ).setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+      return ContentService.createTextOutput(
+        JSON.stringify({ ok: false, error: "Invalid email or password" })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
 
     if (data.action === "listLeads") {
       var listSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Leads");
