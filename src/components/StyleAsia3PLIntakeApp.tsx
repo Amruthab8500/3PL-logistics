@@ -69,6 +69,7 @@ const ENV_EMAIL_WEBHOOK = (process.env.REACT_APP_EMAIL_WEBHOOK_URL || "").trim()
 
 const STATUS_OPTIONS: LeadStatus[] = ["New", "Quoted", "Onboarding", "Active"];
 
+/** Seeds localStorage when a browser has no staff list yet. Not shown on the login screen — edit or replace after first admin setup (Settings). */
 const DEMO_USERS: StaffDirectoryEntry[] = [
   { email: "admin@styleasia.com", password: "styleasia123", name: "Admin", isAdmin: true },
   { email: "ops@styleasia.com", password: "warehouse123", name: "Operations", isAdmin: false },
@@ -425,7 +426,7 @@ export default function StyleAsia3PLIntakeApp() {
   const [records, setRecords] = useState<LeadRecord[]>([]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<LeadStatus | null>(null);
-  const [login, setLogin] = useState({ email: "admin@styleasia.com", password: "styleasia123" });
+  const [login, setLogin] = useState({ email: "", password: "" });
   const [staffUsers, setStaffUsers] = useState<StaffDirectoryEntry[]>(DEMO_USERS);
   const [newStaff, setNewStaff] = useState({ name: "", email: "", password: "", isAdmin: false });
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -1028,7 +1029,7 @@ export default function StyleAsia3PLIntakeApp() {
     if (!found) {
       setSyncState({
         type: "error",
-        message: "Login failed. Use the account your admin gave you, or the default admin sign-in.",
+        message: "Login failed. Check your email and password, or ask an admin for access.",
       });
       maybeToast(() => toast.error("Login failed."));
       return;
@@ -1217,26 +1218,27 @@ export default function StyleAsia3PLIntakeApp() {
               <CardHeader>
                 <CardTitle className="text-2xl">Login</CardTitle>
                 <CardDescription>
-                  <strong>Admin:</strong>{" "}
-                  <code className="rounded bg-slate-100 px-1 text-xs">admin@styleasia.com</code> /{" "}
-                  <code className="rounded bg-slate-100 px-1 text-xs">styleasia123</code>
-                  <span className="mx-1.5 text-slate-400">·</span>
-                  <strong>Staff (no Settings):</strong>{" "}
-                  <code className="rounded bg-slate-100 px-1 text-xs">ops@styleasia.com</code> /{" "}
-                  <code className="rounded bg-slate-100 px-1 text-xs">warehouse123</code>
-                  . Admins can add more people under Settings after logging in.
+                  Sign in with the email and password your administrator created. After the{" "}
+                  <strong>first</strong> login, an admin can add more staff under <strong>Settings</strong>. Passwords are
+                  not shown on this page — keep the staff URL private.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
                     <Label>Email</Label>
-                    <Input value={login.email} onChange={(e) => setLogin({ ...login, email: e.target.value })} />
+                    <Input
+                      type="email"
+                      autoComplete="username"
+                      value={login.email}
+                      onChange={(e) => setLogin({ ...login, email: e.target.value })}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Password</Label>
                     <Input
                       type="password"
+                      autoComplete="current-password"
                       value={login.password}
                       onChange={(e) => setLogin({ ...login, password: e.target.value })}
                     />
