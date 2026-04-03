@@ -680,7 +680,7 @@ export default function StyleAsia3PLIntakeApp() {
       const msg =
         source === "public"
           ? "This form is not connected yet. Please contact Style Asia directly or try again later."
-          : "Saved locally. Add your Google Sheets webhook in Settings, or set REACT_APP_GOOGLE_SHEETS_WEBHOOK_URL in a .env file before `npm run build` (free Apps Script + Sheet, no paid database).";
+          : "Saved locally only. An admin should open Settings and paste the Google Apps Script web app URL so rows sync to your Sheet.";
       setSyncState({ type: source === "public" ? "error" : "idle", message: msg });
       if (source === "public") toast.error("We could not submit your inquiry. Please try again or call us.");
       return undefined;
@@ -971,7 +971,7 @@ export default function StyleAsia3PLIntakeApp() {
   const pullFromGoogleSheet = async () => {
     const url = (integrations.googleSheetsWebhook.trim() || ENV_GOOGLE_SHEETS_WEBHOOK).trim();
     if (!url) {
-      toast.error("Add your Google Sheets webhook in Settings or REACT_APP_GOOGLE_SHEETS_WEBHOOK_URL in .env.");
+      toast.error('Google Sheets URL missing. Admin: open Settings → paste your Apps Script "web app" URL, then try again.');
       return;
     }
     setSheetPullLoading(true);
@@ -1584,8 +1584,8 @@ export default function StyleAsia3PLIntakeApp() {
                         </div>
                         <p className="mt-1 text-sm text-slate-500">
                           {integrations.googleSheetsWebhook.trim() || ENV_GOOGLE_SHEETS_WEBHOOK
-                            ? "Webhook set (Settings or build-time .env — free Google Sheet)"
-                            : "Not connected yet"}
+                            ? "Connected — new leads sync to your Sheet"
+                            : "Not connected yet — add URL in Settings below"}
                         </p>
                       </div>
                       <div className="rounded-2xl border p-4">
