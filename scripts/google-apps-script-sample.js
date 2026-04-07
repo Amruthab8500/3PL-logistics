@@ -288,7 +288,7 @@ function doPost(e) {
 
     if (data.action === "validateStaffLogin") {
       var loginEmail = String(data.email || "").trim().toLowerCase();
-      var loginPass = String(data.password || "");
+      var loginPass = String(data.password || "").trim();
       if (!loginEmail || loginPass === "") {
         return ContentService.createTextOutput(
           JSON.stringify({ ok: false, error: "Missing email or password" })
@@ -350,7 +350,7 @@ function doPost(e) {
       for (var dr = headerRowIdx + 1; dr < svals.length; dr++) {
         var drow = svals[dr];
         var dem = String(drow[cols.colEmail] || "").trim();
-        var dpw = String(drow[cols.colPass] || "");
+        var dpw = String(drow[cols.colPass] || "").trim();
         if (dem && dpw) hasDataRow = true;
       }
       if (!hasDataRow) {
@@ -365,7 +365,7 @@ function doPost(e) {
       for (var sr = headerRowIdx + 1; sr < svals.length; sr++) {
         var srow = svals[sr];
         var rowEmail = String(srow[cols.colEmail] || "").trim().toLowerCase();
-        var rowPass = String(srow[cols.colPass] || "");
+        var rowPass = String(srow[cols.colPass] || "").trim();
         if (rowEmail === loginEmail && rowPass === loginPass) {
           var dispName = cols.colName >= 0 ? String(srow[cols.colName] || "").trim() : "";
           if (!dispName) dispName = loginEmail;

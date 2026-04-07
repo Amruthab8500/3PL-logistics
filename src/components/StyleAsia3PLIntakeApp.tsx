@@ -1132,6 +1132,14 @@ export default function StyleAsia3PLIntakeApp() {
           });
           return;
         }
+        if (/invalid email|invalid password/i.test(errMsg) && tryLocalStaffLogin(emailNorm, password)) {
+          maybeToast(() =>
+            toast.message(
+              "Google Sheet had no matching staff row — signed in with this browser’s saved list. Add this email/password on the Staff tab (or use Settings → Add user) so login works on every computer."
+            )
+          );
+          return;
+        }
         setSyncState({
           type: "error",
           message: errMsg || "Login failed. Check the Staff tab in your Google Sheet or your password.",
