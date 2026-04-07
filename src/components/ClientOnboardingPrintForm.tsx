@@ -102,8 +102,7 @@ export function ClientOnboardingPrintForm() {
         ))}
       </div>
 
-      <SectionTitle>Technology &amp; Integration</SectionTitle>
-      <div className="text-sm font-medium">Sales channels:</div>
+      <SectionTitle>Sales channels</SectionTitle>
       <div className="mt-1 grid gap-1.5 sm:grid-cols-2">
         {SALES_CHANNEL_OPTIONS.map((opt) => (
           <CheckboxRow key={opt} label={opt} />
@@ -114,25 +113,12 @@ export function ClientOnboardingPrintForm() {
           <span className="inline-block min-w-[35%] flex-1 border-b border-slate-400" />
         </div>
       </div>
-      <div className="mt-3 flex flex-wrap gap-6 text-sm">
-        <span className="font-medium">Need system integration?</span>
-        <CheckboxRow label="Yes" />
-        <CheckboxRow label="No" />
-      </div>
 
       <SectionTitle>Storage Needs</SectionTitle>
       <LineField label="Estimated pallet positions:" />
       <div className="text-sm">
         <span className="font-medium">Special storage (climate, high value, etc.):</span>
         <div className="mt-1 min-h-[2.5rem] border-b border-slate-300" />
-      </div>
-
-      <SectionTitle>Transportation</SectionTitle>
-      <LineField label="Preferred carriers:" />
-      <div className="mt-2 flex flex-wrap gap-6 text-sm">
-        <span className="font-medium">Need shipping rate optimization?</span>
-        <CheckboxRow label="Yes" />
-        <CheckboxRow label="No" />
       </div>
 
       <SectionTitle>Additional Requirements</SectionTitle>

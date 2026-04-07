@@ -294,8 +294,7 @@ export function OnboardingFields({
       </section>
 
       <section className="space-y-4">
-        <SectionTitle>Technology &amp; Integration</SectionTitle>
-        <p className="text-sm font-medium text-slate-700">Sales channels</p>
+        <SectionTitle>Sales channels</SectionTitle>
         <div className="grid gap-2 sm:grid-cols-3">
           {SALES_CHANNEL_OPTIONS.map((opt) => (
             <label key={opt} className="flex cursor-pointer items-center gap-2 rounded-xl border p-2 text-sm">
@@ -318,12 +317,6 @@ export function OnboardingFields({
             onChange={(e) => setForm((f) => ({ ...f, salesChannelOther: e.target.value }))}
           />
         </div>
-        <YesNoSelect
-          id="integr"
-          label="Need system integration?"
-          value={form.needSystemIntegration}
-          onChange={(needSystemIntegration) => setForm((f) => ({ ...f, needSystemIntegration }))}
-        />
       </section>
 
       <section className="space-y-4">
@@ -346,25 +339,6 @@ export function OnboardingFields({
             onChange={(e) => setForm((f) => ({ ...f, specialStorage: e.target.value }))}
           />
         </div>
-      </section>
-
-      <section className="space-y-4">
-        <SectionTitle>Transportation</SectionTitle>
-        <div className="space-y-1">
-          <Label htmlFor="carriers">Preferred carriers</Label>
-          <Input
-            id="carriers"
-            className="rounded-xl"
-            value={form.preferredCarriers}
-            onChange={(e) => setForm((f) => ({ ...f, preferredCarriers: e.target.value }))}
-          />
-        </div>
-        <YesNoSelect
-          id="rateopt"
-          label="Need shipping rate optimization?"
-          value={form.needShippingRateOptimization}
-          onChange={(needShippingRateOptimization) => setForm((f) => ({ ...f, needShippingRateOptimization }))}
-        />
       </section>
 
       {showTimeline ? (
