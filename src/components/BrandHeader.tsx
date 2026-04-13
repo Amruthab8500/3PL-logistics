@@ -19,7 +19,7 @@ export function BrandHeader({ subtitle, className = "" }: BrandHeaderProps) {
         }}
       />
       <div className="flex-1 md:pb-0.5">
-        <h1 className="text-xl font-bold tracking-tight text-[#0a3d62] md:text-2xl">STYLE ASIA 3PL CLIENT ONBOARDING</h1>
+        <h1 className="text-xl font-bold tracking-tight text-[#0a3d62] md:text-2xl">STYLE ASIA 3PL CLIENT INQUIRY FORM</h1>
         {subtitle ? <p className="mt-1 text-sm font-medium text-slate-600">{subtitle}</p> : null}
         <p className="mt-1 text-xs italic text-slate-500">EVERYDAY, INNOVATIVE PRODUCTS</p>
       </div>

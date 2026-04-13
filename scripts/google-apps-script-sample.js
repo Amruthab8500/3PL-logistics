@@ -15,6 +15,9 @@
  *
  * Staff mutations: POST action upsertStaffUser { email, password, name, isAdmin } — add or update a row.
  * removeStaffUser { email } — delete that user's row. Same security as lead POST (webhook URL must stay private).
+ *
+ * STAFF ALERT: optional JSON field notifyEmail (set from the app by admins / REACT_APP_STAFF_NOTIFY_EMAIL). On each new
+ * lead POST from the website, after the row is appended, MailApp sends a short summary to that address (if present).
  */
 
 /** Must match append order exactly (37 columns). */
@@ -584,6 +587,28 @@ function doPost(e) {
         subject: subject,
         body: body,
       });
+    }
+
+    try {
+      var staffTo = String(data.notifyEmail || "").trim();
+      if (staffTo && staffTo.indexOf("@") > 0) {
+        var subjStaff = "New 3PL inquiry: " + (lead.companyName || "Website");
+        var bodyStaff =
+          "A new client inquiry was submitted on the website.\n\n" +
+          "Company: " + (lead.companyName || "") + "\n" +
+          "Contact: " + (lead.contactName || "") + "\n" +
+          "Email: " + (lead.email || "") + "\n" +
+          "Phone: " + (lead.phone || "") + "\n\n" +
+          "Open your Leads sheet for full details.\n\n" +
+          "— Style Asia 3PL (automated)";
+        MailApp.sendEmail({
+          to: staffTo,
+          subject: subjStaff,
+          body: bodyStaff,
+        });
+      }
+    } catch (staffMailErr) {
+      // Row is saved; do not fail the webhook if staff notification fails
     }
 
     return ContentService.createTextOutput(JSON.stringify({ ok: true, sheetRow: appendedRow })).setMimeType(

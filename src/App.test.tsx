@@ -5,7 +5,7 @@ describe("portal routing", () => {
   it("shows only the public inquiry form when staff flag is absent", () => {
     window.history.pushState({}, "", "/");
     render(<App />);
-    expect(screen.getByText(/STYLE ASIA 3PL CLIENT ONBOARDING/i)).toBeInTheDocument();
+    expect(screen.getByText(/STYLE ASIA 3PL CLIENT INQUIRY FORM/i)).toBeInTheDocument();
     expect(screen.queryByText(/Style Asia 3PL Intake Hub/i)).not.toBeInTheDocument();
   });
 
@@ -13,6 +13,6 @@ describe("portal routing", () => {
     window.history.pushState({}, "", "/?staff=1");
     render(<App />);
     expect(screen.getByText(/Style Asia 3PL Intake Hub/i)).toBeInTheDocument();
-    expect(screen.queryByText(/STYLE ASIA 3PL CLIENT ONBOARDING/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/STYLE ASIA 3PL CLIENT INQUIRY FORM/i)).not.toBeInTheDocument();
   });
 });

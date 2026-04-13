@@ -17,7 +17,9 @@
 #   https://script.google.com/macros/s/AKfycb.../exec
 # No quotes. No spaces before/after. Redeploy after saving (push or Re-run workflow).
 #
-# Optional repository secret: REACT_APP_EMAIL_WEBHOOK_URL
+# Optional repository secrets:
+#   REACT_APP_EMAIL_WEBHOOK_URL
+#   REACT_APP_STAFF_NOTIFY_EMAIL — ops inbox for "new website inquiry" (must match updated Apps Script; see sample JS).
 
 name: Deploy GitHub Pages
 
@@ -76,6 +78,7 @@ jobs:
           PUBLIC_URL: /${{ github.event.repository.name }}/
           REACT_APP_GOOGLE_SHEETS_WEBHOOK_URL: ${{ secrets.REACT_APP_GOOGLE_SHEETS_WEBHOOK_URL }}
           REACT_APP_EMAIL_WEBHOOK_URL: ${{ secrets.REACT_APP_EMAIL_WEBHOOK_URL }}
+          REACT_APP_STAFF_NOTIFY_EMAIL: ${{ secrets.REACT_APP_STAFF_NOTIFY_EMAIL }}
         run: npm run build
 
       - uses: actions/upload-pages-artifact@v3

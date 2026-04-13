@@ -66,6 +66,8 @@ import type {
 /** Baked into production build so the **public** (non-staff) page can POST; staff can also paste the same URL in Settings. */
 const ENV_GOOGLE_SHEETS_WEBHOOK = (process.env.REACT_APP_GOOGLE_SHEETS_WEBHOOK_URL || "").trim();
 const ENV_EMAIL_WEBHOOK = (process.env.REACT_APP_EMAIL_WEBHOOK_URL || "").trim();
+/** Baked into production build so public submissions include a staff alert address without the visitor's browser storage. */
+const ENV_STAFF_NOTIFY_EMAIL = (process.env.REACT_APP_STAFF_NOTIFY_EMAIL || "").trim();
 
 const STATUS_OPTIONS: LeadStatus[] = ["New", "Quoted", "Onboarding", "Active"];
 
@@ -305,7 +307,9 @@ function resolveEmailWebhook(integrationsState: IntegrationsConfig): string {
 function resolveNotifyEmail(integrationsState: IntegrationsConfig): string {
   const fromState = integrationsState.notifyEmail.trim();
   if (fromState) return fromState;
-  return readIntegrationsFromStorage().notifyEmail.trim();
+  const fromLs = readIntegrationsFromStorage().notifyEmail.trim();
+  if (fromLs) return fromLs;
+  return ENV_STAFF_NOTIFY_EMAIL;
 }
 
 function normalizeSessionUser(raw: unknown): SessionUser | null {
@@ -729,6 +733,7 @@ export default function StyleAsia3PLIntakeApp() {
 
     const sheetsUrl = resolveGoogleSheetsWebhook(integrations);
     const emailUrl = resolveEmailWebhook(integrations);
+    const staffNotifyEmail = source === "public" ? resolveNotifyEmail(integrations).trim() : "";
 
     if (!sheetsUrl && !emailUrl) {
       const msg =
@@ -751,6 +756,7 @@ export default function StyleAsia3PLIntakeApp() {
             destination: "google-sheets",
             lead: payload,
             ...(customerConfirmation ? { customerConfirmation } : {}),
+            ...(staffNotifyEmail && EMAIL_RE.test(staffNotifyEmail) ? { notifyEmail: staffNotifyEmail } : {}),
           }),
         });
         const text = await res.text();
@@ -1302,9 +1308,9 @@ export default function StyleAsia3PLIntakeApp() {
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
             <Card className="rounded-[28px] border border-slate-200/80 bg-white shadow-xl md:border-0">
               <CardHeader className="space-y-4">
-                <BrandHeader subtitle="Complete all sections that apply. We will email you a confirmation when the form is connected." />
+                <BrandHeader subtitle="Complete all sections that apply. We will email you a confirmation when the form is submitted." />
                 <CardDescription className="text-center text-slate-600 md:text-left">
-                  Fields marked * are required. Your answers are sent securely to our team and recorded in Google Sheets.
+                  Fields marked * are required.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -2181,15 +2187,33 @@ export default function StyleAsia3PLIntakeApp() {
                       value={integrations.emailWebhook}
                       onChange={(e) => setIntegrations({ ...integrations, emailWebhook: e.target.value })}
                     />
+                    <p className="text-xs text-slate-500">
+                      Optional Zapier/Make/etc. When set, the app POSTs the lead here too; include{" "}
+                      <code className="rounded bg-slate-100 px-1 text-[11px]">notifyEmail</code> in that payload for your
+                      automation.
+                    </p>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Notification Email</Label>
-                    <Input
-                      placeholder="ops@styleasia.com"
-                      value={integrations.notifyEmail}
-                      onChange={(e) => setIntegrations({ ...integrations, notifyEmail: e.target.value })}
-                    />
-                  </div>
+                  {user.isAdmin ? (
+                    <div className="space-y-2 rounded-2xl border border-sky-200/80 bg-sky-50/50 p-4">
+                      <Label>Staff alert email (new website inquiries)</Label>
+                      <Input
+                        type="email"
+                        placeholder="you@styleasia.com"
+                        value={integrations.notifyEmail}
+                        onChange={(e) => setIntegrations({ ...integrations, notifyEmail: e.target.value })}
+                        className="rounded-xl bg-white"
+                      />
+                      <p className="text-xs text-slate-600">
+                        When a <strong>client</strong> submits the public form, Google Apps Script (sample script in this
+                        repo) can email this address a short summary — same time the row is added and the customer gets a
+                        confirmation. Save here on an admin browser, and for the <strong>live</strong> site also add
+                        repository secret{" "}
+                        <code className="rounded bg-white px-1 text-[11px]">REACT_APP_STAFF_NOTIFY_EMAIL</code> so visitors
+                        who never opened Settings still trigger the alert. Redeploy the Apps Script after updating{" "}
+                        <code className="rounded bg-white px-1 text-[11px]">google-apps-script-sample.js</code>.
+                      </p>
+                    </div>
+                  ) : null}
 
                   <div className="flex items-center gap-3 rounded-2xl border p-4">
                     <Checkbox
@@ -2215,14 +2239,17 @@ export default function StyleAsia3PLIntakeApp() {
                   </CardHeader>
                   <CardContent className="space-y-4 text-sm text-slate-700">
                     <div className="rounded-2xl border p-4">
-                      <p className="font-medium">Google Sheets + customer confirmation email</p>
+                      <p className="font-medium">Google Sheets + customer confirmation + staff alert</p>
                       <p className="mt-1 text-slate-600">
                         Create a Google Apps Script web app linked to a Sheet. On each POST, append one row. For{" "}
                         <strong>public</strong> inquiries, the JSON includes <code className="rounded bg-slate-100 px-1">customerConfirmation</code>{" "}
                         (<code className="rounded bg-slate-100 px-1">send: true</code>, <code className="rounded bg-slate-100 px-1">to</code>, names) — use{" "}
                         <code className="rounded bg-slate-100 px-1">MailApp.sendEmail</code> in the script to email them
-                        “we received your inquiry and will get back to you.” See <code className="rounded bg-slate-100 px-1">scripts/google-apps-script-sample.js</code>{" "}
-                        in this project for a paste-in example.
+                        “we received your inquiry and will get back to you.” The same POST can include{" "}
+                        <code className="rounded bg-slate-100 px-1">notifyEmail</code> for your team inbox (set under Integrations
+                        or <code className="rounded bg-slate-100 px-1">REACT_APP_STAFF_NOTIFY_EMAIL</code> on the build). See{" "}
+                        <code className="rounded bg-slate-100 px-1">scripts/google-apps-script-sample.js</code> in this project
+                        for a paste-in example — redeploy the web app after updating the script.
                       </p>
                     </div>
                     <div className="rounded-2xl border p-4">
