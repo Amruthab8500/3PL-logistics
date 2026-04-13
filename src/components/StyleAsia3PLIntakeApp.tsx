@@ -312,6 +312,19 @@ function resolveNotifyEmail(integrationsState: IntegrationsConfig): string {
   return ENV_STAFF_NOTIFY_EMAIL;
 }
 
+/**
+ * Website inquiry POST only. Order:
+ * 1) Build-time REACT_APP_STAFF_NOTIFY_EMAIL — wins over browser storage so updating the GitHub secret + redeploy replaces old addresses.
+ * 2) Fresh localStorage read each submit — picks up admin Settings changes without reloading the public tab.
+ */
+function resolveNotifyEmailForPublicInquiry(): string {
+  const env = ENV_STAFF_NOTIFY_EMAIL.trim();
+  if (env && EMAIL_RE.test(env)) return env;
+  const fromLs = readIntegrationsFromStorage().notifyEmail.trim();
+  if (fromLs && EMAIL_RE.test(fromLs)) return fromLs;
+  return "";
+}
+
 function normalizeSessionUser(raw: unknown): SessionUser | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
@@ -733,7 +746,7 @@ export default function StyleAsia3PLIntakeApp() {
 
     const sheetsUrl = resolveGoogleSheetsWebhook(integrations);
     const emailUrl = resolveEmailWebhook(integrations);
-    const staffNotifyEmail = source === "public" ? resolveNotifyEmail(integrations).trim() : "";
+    const staffNotifyEmail = source === "public" ? resolveNotifyEmailForPublicInquiry().trim() : "";
 
     if (!sheetsUrl && !emailUrl) {
       const msg =
@@ -776,7 +789,7 @@ export default function StyleAsia3PLIntakeApp() {
           headers: postHeadersForWebhook(emailUrl),
           body: JSON.stringify({
             destination: "email",
-            notifyEmail: resolveNotifyEmail(integrations),
+            notifyEmail: source === "public" ? resolveNotifyEmailForPublicInquiry() : resolveNotifyEmail(integrations),
             subject: `New 3PL inquiry from ${lead.companyName}`,
             lead: payload,
             ...(customerConfirmation ? { customerConfirmation } : {}),
@@ -2204,12 +2217,13 @@ export default function StyleAsia3PLIntakeApp() {
                         className="rounded-xl bg-white"
                       />
                       <p className="text-xs text-slate-600">
-                        When a <strong>client</strong> submits the public form, Google Apps Script (sample script in this
-                        repo) can email this address a short summary — same time the row is added and the customer gets a
-                        confirmation. Save here on an admin browser, and for the <strong>live</strong> site also add
-                        repository secret{" "}
-                        <code className="rounded bg-white px-1 text-[11px]">REACT_APP_STAFF_NOTIFY_EMAIL</code> so visitors
-                        who never opened Settings still trigger the alert. Redeploy the Apps Script after updating{" "}
+                        When a <strong>client</strong> submits the public form, Apps Script can email this inbox a short
+                        summary. <strong>If</strong> you set{" "}
+                        <code className="rounded bg-white px-1 text-[11px]">REACT_APP_STAFF_NOTIFY_EMAIL</code> in GitHub
+                        Actions, that value is used on the live site — update the secret and <strong>re-run Deploy GitHub Pages</strong>{" "}
+                        when you change the address (the old email was stuck in the last build). If you do{" "}
+                        <em>not</em> use that secret, only this field applies and the app reads it fresh on every submit.
+                        Redeploy the Apps Script after updating{" "}
                         <code className="rounded bg-white px-1 text-[11px]">google-apps-script-sample.js</code>.
                       </p>
                     </div>
